@@ -1,0 +1,12 @@
+python main.py \
+    --instance-type ml.g6.12xlarge \
+    --instance-count 4 \
+    --region us-west-2 \
+    --s3-bucket sagemaker-us-west-2-123456789012 \
+    --train-image-uri 123456789012.dkr.ecr.us-west-2.amazonaws.com/training-base:py312_torch_transformers-v1.1 \
+    --role-arn arn:aws:iam::123456789012:role/service-role/AmazonSageMaker-ExecutionRole-20240229T124003 \
+    --local-code-path ./resnet50 \
+    --env-setup-command "conda activate py_312_torch_transformers" \
+    --entrypoint 'bash ./entrypoint.sh "$@"' \
+    --train-args "main.py --epochs=10 --batch-size=256" \
+    --job-name-prefix resnet50-fashion-mnist
