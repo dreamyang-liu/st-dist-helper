@@ -4,6 +4,8 @@ import boto3
 import json
 import subprocess
 import logging
+import os
+from jinja2 import Template
 from botocore.exceptions import ClientError
 
 logging.basicConfig(level=logging.INFO)
@@ -18,18 +20,17 @@ def parse_arguments():
     parser.add_argument("--train-image-uri", type=str, required=True)
     parser.add_argument("--role-arn", type=str, required=True)
     parser.add_argument("--local-code-path", type=str, required=True)
-    parser.add_argument("--entrypoint", type=str, required=True)
-    parser.add_argument("--train-args", type=str, required=False)
+    parser.add_argument("--train-command", type=str, required=False)
     parser.add_argument("--input-data", type=str, required=False)
     parser.add_argument("--output-data", type=str, required=False)
     parser.add_argument("--env-setup-command", type=str, required=False)
     parser.add_argument("--job-name-prefix", type=str, default="my-training-job")
     return parser.parse_args()
 
-def generate_job_name(train_args, job_name_prefix):
+def generate_job_name(train_command, job_name_prefix):
     brt = boto3.client('bedrock-runtime')
     model_id = "anthropic.claude-3-5-haiku-20241022-v1:0"
-    prompt = f"Given the training arguments {train_args} and training job name prefix {job_name_prefix}, give a concise and descriptive training job name to highlight the key aspects of the training job in 50 characters or less. You may want to shorten the description, like batch size to bs, epochs to ep, etc. Do not include any additional text or explanations, only output the result"
+    prompt = f"Given the training command {train_command} and training job name prefix {job_name_prefix}, give a concise and descriptive training job name to highlight the key aspects of the training job in 50 characters or less. You may want to shorten the description, like batch size to bs, epochs to ep, etc. Do not include any additional text or explanations, only output the result"
 
     try:
         native_request = {
@@ -52,25 +53,17 @@ def generate_job_name(train_args, job_name_prefix):
     except (ClientError, Exception) as e:
         logger.error(f"ERROR: Can't invoke '{model_id}'. Reason: {e}")
         return ""
-import os
 
-def create_entrypoint_script(args):
-    script_content = f"""#!/bin/bash
-        set -e
-        cd /opt/ml/input/data/code
-        eval "$(/root/miniconda3/bin/conda shell.bash hook)"
-        {args.env_setup_command or ''}
-        {args.entrypoint} {args.train_args or ''}
-        """
-    script_filename = 'entrypoint.sh'
-    script_path = os.path.join(args.local_code_path, script_filename)
-
-    with open(script_path, 'w') as f:
-        f.write(script_content)
-
-    os.chmod(script_path, 0o755)  # Make the script executable
-
-    return script_filename
+def render_template(args, **kwargs):
+    with open("entrypoint.jinja", 'r') as f:
+        template_content = f.read()
+    
+    template = Template(template_content)
+    rendered_content = template.render(**kwargs)
+    
+    with open(os.path.join(args.local_code_path, "sm-entrypoint.sh"), 'w') as f:
+        f.write(rendered_content)
+    os.chmod(os.path.join(args.local_code_path, "sm-entrypoint.sh"), 0o755)
 
 def sync_code_to_s3(local_path, s3_bucket):
     code_uri = f"s3://{s3_bucket}/code/{local_path.split('/')[-1]}"
@@ -86,16 +79,13 @@ def sync_code_to_s3(local_path, s3_bucket):
 
 def create_training_job(args, code_uri):
     sagemaker = boto3.client('sagemaker')
-
-    GO_TO_CODE_DIR_AND_ACTIVATE_CONDA = "cd /opt/ml/input/data/code && eval \"$(/root/miniconda3/bin/conda shell.bash hook)\""
-
     response = sagemaker.create_training_job(
         TrainingJobName=f"{args.job_name_prefix}-{int(time.time())}",
         AlgorithmSpecification={
             'TrainingImage': args.train_image_uri,
             'TrainingInputMode': 'File',
             'ContainerEntrypoint': ['bash'],
-            'ContainerArguments': ['-c', f"{GO_TO_CODE_DIR_AND_ACTIVATE_CONDA} && {args.env_setup_command} && {args.entrypoint} {args.train_args}"]
+            'ContainerArguments': ['-c', 'bash /opt/ml/input/data/code/sm-entrypoint.sh']
         },
         RoleArn=args.role_arn,
         InputDataConfig=[
@@ -135,7 +125,12 @@ def create_training_job(args, code_uri):
 
 def main():
     args = parse_arguments()
-    args.job_name_prefix = generate_job_name(args.train_args, args.job_name_prefix)
+    args.job_name_prefix = generate_job_name(args.train_command, args.job_name_prefix)
+    render_template(args, environment_setup_command=args.env_setup_command,
+                    entrypoint_command=args.train_command,
+                    training_mode='multi-node' if args.instance_count > 1 else 'single-node',
+                    trim_blocks=True,
+                    lstrip_blocks=True)
     code_uri = sync_code_to_s3(args.local_code_path, args.s3_bucket)
     response = create_training_job(args, code_uri)
     logger.info(f"Training job created: {response}")

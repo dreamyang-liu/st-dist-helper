@@ -1,28 +1,15 @@
 #!/bin/bash
-
-# This script is used to set up the environment for distributed training in SageMaker Training Job.
-# It extracts the necessary information from the resource config file and sets the appropriate environment variables.
-
-set -e
+set -ex
 resource_config_path="/opt/ml/input/config/resourceconfig.json"
-
 if [[ ! -f "$resource_config_path" ]]; then
     echo "Error: Resource config file not found at $resource_config_path"
     exit 1
 fi
-
 cat "$resource_config_path"
-
-# Use jq to extract all needed information in one call
-# Extract current_host, hosts array, and gpu_count from the resource config file
 current_host=$(jq -r '.current_host' "$resource_config_path")
 hosts=$(jq '.hosts | length' "$resource_config_path")
-
-# Print extracted values for verification
 echo "Current host: $current_host"
-echo "Hosts: $hosts"
-
-# Extract the host number from current_host and calculate rank_id
+echo "Total Hosts: $hosts"
 if [[ $current_host =~ algo-([0-9]+) ]]; then
     host_number="${BASH_REMATCH[1]}"
     rank_id=$((host_number - 1))
@@ -41,10 +28,31 @@ echo "nnodes: $nnodes"
 echo "nproc_per_node: $nproc_per_node"
 echo "rank_id: $rank_id"
 
+cd /opt/ml/input/data/code
+
+{% set multi_node_launch_command %}
+{% raw %}
 exec torchrun --nnodes="$nnodes" \
-         --nproc_per_node="$nproc_per_node" \
-         --rdzv_id=resnet50 \
-         --rdzv_backend=c10d \
-         --rdzv_endpoint=algo-1:29500 \
-         --node_rank="$rank_id" \
-         "$@"
+--nproc_per_node="$nproc_per_node" \
+--rdzv_id=4224 \
+--rdzv_backend=c10d \
+--max_restarts=3 \
+--rdzv_endpoint=algo-1:29500 \
+--node_rank="$rank_id" \{% endraw %}
+{% endset %}
+
+{% set single_node_launch_command %}
+{% raw %}
+exec torchrun --nnodes=1 \
+--nproc_per_node="$nproc_per_node" \{% endraw %}
+{% endset %}
+
+# Environment Setup
+{{ environment_setup_command }}
+
+# Entrypoint
+{% if training_mode == 'multi-node' %}
+{{ multi_node_launch_command }}{{ entrypoint_command }}
+{% else %}  
+{{ single_node_launch_command }}{{ entrypoint_command }}
+{% endif %}
