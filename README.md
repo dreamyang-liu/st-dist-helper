@@ -45,13 +45,13 @@ python main.py \
     --train-image-uri =<account-id>.dkr.ecr.us-west-2.amazonaws.com/training-base:py312_torch_transformers-v1.1 \
     --role-arn arn:aws:iam::<account-id>:role/service-role/AmazonSageMaker-ExecutionRole-20240229T124003 \
     --local-code-path ./resnet50 \
-    --env-setup-command "eval \"$(/root/miniconda3/bin/conda shell.bash hook)\" && conda activate py_312_torch_transformers" \
+    --env-setup-command "source /root/miniconda3/etc/profile.d/conda.sh && conda activate py_312_torch_transformers" \
     --train-command 'main.py --epochs=10 --batch-size=256' \
     --auto-job-name \
     --job-name-prefix resnet50-fashion-mnist
 ```
 
-Note: `eval "$(/root/miniconda3/bin/conda shell.bash hook)"` is used to activate conda in the shell.
+Note: `source /root/miniconda3/etc/profile.d/conda.sh` is used to activate conda in the shell.
 
 You can directly run the `submit.sh` to submit the training job as a quick exercise. Remember to use your own AWS account.
 

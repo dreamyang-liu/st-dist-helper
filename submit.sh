@@ -6,6 +6,7 @@ python main.py \
     --train-image-uri 123456789012.dkr.ecr.us-west-2.amazonaws.com/training-base:py312_torch_transformers-v1.1 \
     --role-arn arn:aws:iam::123456789012:role/service-role/AmazonSageMaker-ExecutionRole-20240229T124003 \
     --local-code-path ./resnet50 \
-    --env-setup-command "eval \"$(/root/miniconda3/bin/conda shell.bash hook)\" && conda activate py_312_torch_transformers" \
+    --env-setup-command "source /root/miniconda3/etc/profile.d/conda.sh && conda activate py_312_torch_transformers" \
     --train-command 'main.py --epochs=10 --batch-size=256' \
+    --auto-job-name \
     --job-name-prefix resnet50-fashion-mnist
