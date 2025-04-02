@@ -13,18 +13,18 @@ logger = logging.getLogger(__name__)
 
 def parse_arguments():
     parser = ArgumentParser()
-    parser.add_argument("--instance-type", type=str, default="t3.large")
-    parser.add_argument("--instance-count", type=int, default=1)
-    parser.add_argument("--region", type=str, default="us-west-2")
-    parser.add_argument("--s3-bucket", type=str, required=True)
-    parser.add_argument("--train-image-uri", type=str, required=True)
-    parser.add_argument("--role-arn", type=str, required=True)
-    parser.add_argument("--local-code-path", type=str, required=True)
-    parser.add_argument("--train-command", type=str, required=False)
-    parser.add_argument("--input-data", type=str, required=False)
-    parser.add_argument("--output-data", type=str, required=False)
-    parser.add_argument("--env-setup-command", type=str, required=False)
-    parser.add_argument("--job-name-prefix", type=str, default="my-training-job")
+    parser.add_argument("--instance-type", type=str, default="t3.large", help="EC2 instance type for training")
+    parser.add_argument("--instance-count", type=int, default=1, help="Number of instances to use for training")
+    parser.add_argument("--region", type=str, default="us-west-2", help="AWS region to run the training job")
+    parser.add_argument("--s3-bucket", type=str, required=True, help="S3 bucket used for storing training code and output")
+    parser.add_argument("--max-runtime", type=int, default=86400, help="Maximum runtime for the training job in seconds")
+    parser.add_argument("--train-image-uri", type=str, required=True, help="URI of the Docker image for training")
+    parser.add_argument("--role-arn", type=str, required=True, help="ARN of the IAM role for SageMaker to assume")
+    parser.add_argument("--local-code-path", type=str, required=True, help="Local path to the training code")
+    parser.add_argument("--train-command", type=str, required=False, help="Command to run for training")
+    parser.add_argument("--env-setup-command", type=str, required=False, help="Command to set up the environment, e.g., 'pip install -r requirements.txt'")
+    parser.add_argument("--auto-job-name", action="store_true", help="Automatically generate a job name based on the training command using Bedrock")
+    parser.add_argument("--job-name-prefix", type=str, default="my-training-job", help="Prefix for the training job name")
     return parser.parse_args()
 
 def generate_job_name(train_command, job_name_prefix):
@@ -106,7 +106,7 @@ def create_training_job(args, code_uri):
             'VolumeSizeInGB': 10
         },
         StoppingCondition={
-            'MaxRuntimeInSeconds': 86400
+            'MaxRuntimeInSeconds': args.max_runtime
         },
         OutputDataConfig={
             'S3OutputPath': f"s3://{args.s3_bucket}/output"
@@ -125,7 +125,8 @@ def create_training_job(args, code_uri):
 
 def main():
     args = parse_arguments()
-    args.job_name_prefix = generate_job_name(args.train_command, args.job_name_prefix)
+    if args.auto_job_name:
+        args.job_name_prefix = generate_job_name(args.train_command, args.job_name_prefix)
     render_template(args, environment_setup_command=args.env_setup_command,
                     entrypoint_command=args.train_command,
                     training_mode='multi-node' if args.instance_count > 1 else 'single-node',
