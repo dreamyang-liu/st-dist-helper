@@ -35,7 +35,7 @@ cd /opt/ml/input/data/code
 
 
 # Environment Setup
-eval "" && conda activate py_312_torch_transformers
+source /root/miniconda3/etc/profile.d/conda.sh && conda activate py_312_torch_transformers
 
 # Entrypoint
 
