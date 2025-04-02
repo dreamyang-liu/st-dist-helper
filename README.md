@@ -36,3 +36,24 @@ The generated entrypoint script will be responsible for:
 ## Example
 In the repo, we provide an example of launching a distributed training job to train resnet50 on FashionMNIST dataset. You can check the existing `submit.sh`.
 
+```shell
+python main.py \
+    --instance-type ml.g6.12xlarge \
+    --instance-count 4 \
+    --region us-west-2 \
+    --s3-bucket sagemaker-us-west-2-<account-id> \
+    --train-image-uri =<account-id>.dkr.ecr.us-west-2.amazonaws.com/training-base:py312_torch_transformers-v1.1 \
+    --role-arn arn:aws:iam::<account-id>:role/service-role/AmazonSageMaker-ExecutionRole-20240229T124003 \
+    --local-code-path ./resnet50 \
+    --env-setup-command "eval \"$(/root/miniconda3/bin/conda shell.bash hook)\" && conda activate py_312_torch_transformers" \
+    --train-command 'main.py --epochs=10 --batch-size=256' \
+    --auto-job-name \
+    --job-name-prefix resnet50-fashion-mnist
+```
+
+Note: `eval "$(/root/miniconda3/bin/conda shell.bash hook)"` is used to activate conda in the shell.
+
+You can directly run the `submit.sh` to submit the training job as a quick exercise. Remember to use your own AWS account.
+
+
+## Plesae let me know if you find any issues or want any feature. 
